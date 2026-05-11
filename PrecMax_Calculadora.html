@@ -452,6 +452,10 @@ header {
 
 .arc-btn-xls  { background: rgba(0,229,160,0.06); color: #1aee8a; border-color: rgba(0,229,160,0.22); }
 .arc-btn-xls:hover  { background: rgba(0,229,160,0.14); }
+.arc-btn-json { background: rgba(77,140,255,0.08); color: var(--blue); border-color: rgba(77,140,255,0.25); }
+.arc-btn-json:hover { background: rgba(77,140,255,0.16); }
+.arc-btn-imp  { background: rgba(124,110,245,0.08); color: #a090ff; border-color: rgba(124,110,245,0.25); }
+.arc-btn-imp:hover  { background: rgba(124,110,245,0.16); }
 .row-edit {
   width: 26px; height: 26px; border-radius: 6px;
   background: transparent; border: 1px solid var(--border);
@@ -753,6 +757,9 @@ header {
     <div class="arquivo-head">
       <div class="arquivo-title">Arquivo de <span>Produtos</span></div>
       <div class="arquivo-actions">
+        <button class="arc-btn arc-btn-json" onclick="exportarJSON()" title="Baixar backup completo em JSON">💾 Backup JSON</button>
+        <button class="arc-btn arc-btn-imp"  onclick="document.getElementById('f-import-json').click()" title="Restaurar backup JSON">📂 Importar JSON</button>
+        <input type="file" id="f-import-json" accept=".json" style="display:none" onchange="importarJSON(this)">
         <button class="arc-btn arc-btn-csv" onclick="exportarCSV()">⬇️ Exportar CSV</button>
         <button class="arc-btn arc-btn-xls" onclick="exportarExcel()">📊 Exportar Excel</button>
         <button class="arc-btn arc-btn-del" onclick="limparTudo()">🗑️ Limpar tudo</button>
@@ -1308,6 +1315,62 @@ function limparTudo() {
 }
 
 // ── EXPORT CSV ───────────────────────────────────────────────
+// ── BACKUP JSON ──────────────────────────────────────────────
+function exportarJSON() {
+  if (!arquivo.length) { toast('Nenhum dado para exportar.', 'err'); return; }
+  const payload = {
+    versao: '1.0',
+    exportado: new Date().toLocaleString('pt-BR'),
+    total: arquivo.length,
+    dados: arquivo
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = `PrecMax_Backup_${new Date().toLocaleDateString('pt-BR').replace(/\//g,'-')}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  toast(`✅ Backup de ${arquivo.length} produtos exportado!`, 'ok');
+}
+
+function importarJSON(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const parsed = JSON.parse(e.target.result);
+      // Aceita tanto o formato com wrapper {dados:[]} quanto array direto
+      const dados = Array.isArray(parsed) ? parsed : (parsed.dados || []);
+      if (!dados.length) { toast('Arquivo vazio ou formato inválido.', 'err'); return; }
+
+      const jaExiste = arquivo.length;
+      if (jaExiste > 0) {
+        if (!confirm(`Você já tem ${jaExiste} produtos salvos.\n\nO que deseja fazer?\n\nOK = Mesclar (mantém os atuais + importa novos)\nCancelar = Substituir tudo pelos ${dados.length} do backup`)) {
+          // Substituir
+          arquivo = dados;
+          localStorage.setItem(DB_KEY, JSON.stringify(arquivo));
+          renderArquivo();
+          toast(`✅ ${dados.length} produtos importados (substituição).`, 'ok');
+          return;
+        }
+      }
+      // Mesclar — evita duplicatas pelo id
+      const idsExistentes = new Set(arquivo.map(r => r.id));
+      const novos = dados.filter(r => !idsExistentes.has(r.id));
+      arquivo = [...arquivo, ...novos];
+      localStorage.setItem(DB_KEY, JSON.stringify(arquivo));
+      renderArquivo();
+      toast(`✅ ${novos.length} produtos importados (${dados.length - novos.length} duplicatas ignoradas).`, 'ok');
+    } catch {
+      toast('❌ Arquivo inválido. Verifique se é um backup PrecMax.', 'err');
+    }
+    input.value = ''; // reseta input para permitir reimportar mesmo arquivo
+  };
+  reader.readAsText(file);
+}
+
 function exportarCSV() {
   if (!arquivo.length) { toast('Nenhum dado para exportar.', 'err'); return; }
   const headers = ['Descrição','Referência','Nº Anúncio','Preço Atual','Custo Unit.','Qtd','Custo Kit','×Mult','Preço Venda','Taxas','Frete','Sobra (MC)','MC%','Plataforma','Tipo','Observações','Data'];
